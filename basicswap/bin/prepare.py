@@ -51,7 +51,7 @@ from basicswap.bin.run import (
 
 # Coin clients
 PARTICL_REPO = os.getenv("PARTICL_REPO", "tecnovert")
-PARTICL_VERSION = os.getenv("PARTICL_VERSION", "27.2.2.0")
+PARTICL_VERSION = os.getenv("PARTICL_VERSION", "27.2.3.0")
 PARTICL_VERSION_TAG = os.getenv("PARTICL_VERSION_TAG", "")
 PARTICL_LINUX_EXTRA = os.getenv("PARTICL_LINUX_EXTRA", "nousb")
 
