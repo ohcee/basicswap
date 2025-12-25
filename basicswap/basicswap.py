@@ -72,6 +72,7 @@ from .db_util import remove_expired_data
 from .http_server import HttpThread
 from .rpc import escape_rpcauth
 from .rpc_xmr import make_xmr_rpc2_func
+from .types import WatchedTransaction, WatchedScript, WatchedOutput
 from .ui.app import UIApp
 from .ui.util import getCoinName
 from .util import (
@@ -285,37 +286,6 @@ def threadPollChainState(swap_client, coin_type):
         except Exception as e:
             swap_client.log.warning(f"threadPollChainState {ci.ticker()}, error: {e}")
         swap_client.chainstate_delay_event.wait(random.randrange(*poll_delay_range))
-
-
-class WatchedOutput:  # Watch for spends
-    __slots__ = ("bid_id", "txid_hex", "vout", "tx_type", "swap_type")
-
-    def __init__(self, bid_id: bytes, txid_hex: str, vout, tx_type, swap_type):
-        self.bid_id = bid_id
-        self.txid_hex = txid_hex
-        self.vout = vout
-        self.tx_type = tx_type
-        self.swap_type = swap_type
-
-
-class WatchedScript:  # Watch for txns containing outputs
-    __slots__ = ("bid_id", "script", "tx_type", "swap_type")
-
-    def __init__(self, bid_id: bytes, script: bytes, tx_type, swap_type):
-        self.bid_id = bid_id
-        self.script = script
-        self.tx_type = tx_type
-        self.swap_type = swap_type
-
-
-class WatchedTransaction:
-    # TODO
-    # Watch for presence in mempool (getrawtransaction)
-    def __init__(self, bid_id: bytes, txid_hex: str, tx_type, swap_type):
-        self.bid_id = bid_id
-        self.txid_hex = txid_hex
-        self.tx_type = tx_type
-        self.swap_type = swap_type
 
 
 class BasicSwap(BaseApp, BSXNetwork, UIApp):
