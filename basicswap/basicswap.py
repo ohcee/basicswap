@@ -10827,7 +10827,7 @@ class BasicSwap(BaseApp, BSXNetwork, UIApp):
             >= self.check_expiring_bids_offers_seconds
         ):
             check_records = True
-            self._last_checked_expiring_bids = now
+            self._last_checked_expiring_bids_offers = now
 
         if (
             len(bids_to_expire) == 0
