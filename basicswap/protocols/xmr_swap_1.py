@@ -191,17 +191,11 @@ def setDLEAG(xmr_swap, ci_to, kbsf: bytes) -> None:
         xmr_swap.kbsf_dleag = ci_to.proveDLEAG(kbsf)
         xmr_swap.pkasf = xmr_swap.kbsf_dleag[0:33]
     elif ci_to.curve_type() == Curves.secp256k1:
-        for i in range(10):
-            xmr_swap.kbsf_dleag = ci_to.signRecoverable(
-                kbsf, "proof kbsf owned for swap"
-            )
-            pk_recovered: bytes = ci_to.verifySigAndRecover(
-                xmr_swap.kbsf_dleag, "proof kbsf owned for swap"
-            )
-            if pk_recovered == xmr_swap.pkbsf:
-                break
-            # self.log.debug('kbsl recovered pubkey mismatch, retrying.')
-        assert pk_recovered == xmr_swap.pkbsf
+        xmr_swap.kbsf_dleag = ci_to.signRecoverable(kbsf, "proof kbsf owned for swap")
+        pk_recovered: bytes = ci_to.verifySigAndRecover(
+            xmr_swap.kbsf_dleag, "proof kbsf owned for swap"
+        )
+        ensure(pk_recovered == xmr_swap.pkbsf, "kbsf recovered pubkey mismatch")
         xmr_swap.pkasf = xmr_swap.pkbsf
     else:
         raise ValueError("Unknown curve")

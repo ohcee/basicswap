@@ -319,6 +319,7 @@ class Test(BaseTest):
         test_coin_from = Coins.PART
         # p2wpkh
         logging.info("---------- Test {} segwit".format(test_coin_from.name))
+
         ci = self.swap_clients[0].ci(test_coin_from)
 
         addr_native = ci.rpc_wallet("getnewaddress", ["p2pkh segwit test"])
@@ -329,9 +330,11 @@ class Test(BaseTest):
             ],
         )
         assert addr_info["iswitness"] is False  # address is p2pkh, not p2wpkh
+
         addr_segwit = ci.rpc_wallet(
             "getnewaddress", ["p2wpkh segwit test", True, False, False, "bech32"]
         )
+
         addr_info = ci.rpc_wallet(
             "getaddressinfo",
             [
@@ -351,6 +354,7 @@ class Test(BaseTest):
                 ],
             ],
         )
+
         assert len(txid) == 64
         tx_wallet = ci.rpc_wallet(
             "gettransaction",

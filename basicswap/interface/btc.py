@@ -236,6 +236,14 @@ class BTCInterface(Secp256k1Interface):
         return CTxOut
 
     @staticmethod
+    def outpointType():
+        return COutPoint
+
+    @staticmethod
+    def txiType():
+        return CTxIn
+
+    @staticmethod
     def getExpectedSequence(lockType: int, lockVal: int) -> int:
         ensure(lockVal >= 1, "Bad lockVal")
         if lockType == TxLockTypes.SEQUENCE_LOCK_BLOCKS:
@@ -1203,7 +1211,7 @@ class BTCInterface(Secp256k1Interface):
         ensure(C == Kaf, "Bad script pubkey")
 
         fee_paid = swap_value - locked_coin
-        assert fee_paid > 0
+        ensure(fee_paid > 0, "negative fee_paid")
 
         dummy_witness_stack = self.getScriptLockTxDummyWitness(prevout_script)
         witness_bytes = self.getWitnessStackSerialisedLength(dummy_witness_stack)
@@ -1267,7 +1275,7 @@ class BTCInterface(Secp256k1Interface):
         tx_value = tx.vout[0].nValue
 
         fee_paid = prevout_value - tx_value
-        assert fee_paid > 0
+        ensure(fee_paid > 0, "negative fee_paid")
 
         dummy_witness_stack = self.getScriptLockRefundSpendTxDummyWitness(
             prevout_script
@@ -2575,12 +2583,7 @@ class BTCInterface(Secp256k1Interface):
                 self._log.id(bytes.fromhex(tx["txid"]))
             )
         )
-        self.rpc(
-            "sendrawtransaction",
-            [
-                tx_signed,
-            ],
-        )
+        self.publishTx(tx_signed)
 
         return tx["txid"]
 

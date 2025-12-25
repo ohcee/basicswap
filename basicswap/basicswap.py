@@ -72,6 +72,7 @@ from .db_util import remove_expired_data
 from .http_server import HttpThread
 from .rpc import escape_rpcauth
 from .rpc_xmr import make_xmr_rpc2_func
+from .types import WatchedTransaction, WatchedScript, WatchedOutput
 from .ui.app import UIApp
 from .ui.util import getCoinName
 from .util import (
@@ -287,37 +288,6 @@ def threadPollChainState(swap_client, coin_type):
         swap_client.chainstate_delay_event.wait(random.randrange(*poll_delay_range))
 
 
-class WatchedOutput:  # Watch for spends
-    __slots__ = ("bid_id", "txid_hex", "vout", "tx_type", "swap_type")
-
-    def __init__(self, bid_id: bytes, txid_hex: str, vout, tx_type, swap_type):
-        self.bid_id = bid_id
-        self.txid_hex = txid_hex
-        self.vout = vout
-        self.tx_type = tx_type
-        self.swap_type = swap_type
-
-
-class WatchedScript:  # Watch for txns containing outputs
-    __slots__ = ("bid_id", "script", "tx_type", "swap_type")
-
-    def __init__(self, bid_id: bytes, script: bytes, tx_type, swap_type):
-        self.bid_id = bid_id
-        self.script = script
-        self.tx_type = tx_type
-        self.swap_type = swap_type
-
-
-class WatchedTransaction:
-    # TODO
-    # Watch for presence in mempool (getrawtransaction)
-    def __init__(self, bid_id: bytes, txid_hex: str, tx_type, swap_type):
-        self.bid_id = bid_id
-        self.txid_hex = txid_hex
-        self.tx_type = tx_type
-        self.swap_type = swap_type
-
-
 class BasicSwap(BaseApp, BSXNetwork, UIApp):
     ws_server = None
     protocolInterfaces = {
@@ -530,7 +500,6 @@ class BasicSwap(BaseApp, BSXNetwork, UIApp):
             self.db_version = self.getIntKV("db_version", cursor, CURRENT_DB_VERSION)
             self.db_data_version = self.getIntKV("db_data_version", cursor, 0)
             self._contract_count = self.getIntKV("contract_count", cursor, 0)
-            self.commitDB()
         finally:
             self.closeDB(cursor)
 
@@ -612,6 +581,13 @@ class BasicSwap(BaseApp, BSXNetwork, UIApp):
 
     def finalise(self):
         self.log.info("Finalising")
+
+        if self.ws_server:
+            try:
+                self.log.info("Stopping websocket server.")
+                self.ws_server.shutdown_gracefully()
+            except Exception as e:  # noqa: F841
+                traceback.print_exc()
 
         self._price_fetch_running = False
         if self._price_fetch_thread and self._price_fetch_thread.is_alive():
@@ -745,6 +721,7 @@ class BasicSwap(BaseApp, BSXNetwork, UIApp):
             "rpcauth": rpcauth,
             "blocks_confirmed": chain_client_settings.get("blocks_confirmed", 6),
             "conf_target": chain_client_settings.get("conf_target", 2),
+            "watched_transactions": [],
             "watched_outputs": [],
             "watched_scripts": [],
             "last_height_checked": last_height_checked,
@@ -4453,17 +4430,13 @@ class BasicSwap(BaseApp, BSXNetwork, UIApp):
                 xmr_swap.kbsf_dleag = ci_to.proveDLEAG(kbsf)
                 xmr_swap.pkasf = xmr_swap.kbsf_dleag[0:33]
             elif ci_to.curve_type() == Curves.secp256k1:
-                for i in range(10):
-                    xmr_swap.kbsf_dleag = ci_to.signRecoverable(
-                        kbsf, "proof kbsf owned for swap"
-                    )
-                    pk_recovered = ci_to.verifySigAndRecover(
-                        xmr_swap.kbsf_dleag, "proof kbsf owned for swap"
-                    )
-                    if pk_recovered == xmr_swap.pkbsf:
-                        break
-                    self.log.debug("kbsl recovered pubkey mismatch, retrying.")
-                assert pk_recovered == xmr_swap.pkbsf
+                xmr_swap.kbsf_dleag = ci_to.signRecoverable(
+                    kbsf, "proof kbsf owned for swap"
+                )
+                pk_recovered = ci_to.verifySigAndRecover(
+                    xmr_swap.kbsf_dleag, "proof kbsf owned for swap"
+                )
+                ensure(pk_recovered == xmr_swap.pkbsf, "kbsf recovered pubkey mismatch")
                 xmr_swap.pkasf = xmr_swap.pkbsf
             else:
                 raise ValueError("Unknown curve")
@@ -4766,17 +4739,13 @@ class BasicSwap(BaseApp, BSXNetwork, UIApp):
                 xmr_swap.kbsl_dleag = ci_to.proveDLEAG(kbsl)
                 msg_buf.kbsl_dleag = xmr_swap.kbsl_dleag[:dleag_split_size_init]
             elif ci_to.curve_type() == Curves.secp256k1:
-                for i in range(10):
-                    xmr_swap.kbsl_dleag = ci_to.signRecoverable(
-                        kbsl, "proof kbsl owned for swap"
-                    )
-                    pk_recovered = ci_to.verifySigAndRecover(
-                        xmr_swap.kbsl_dleag, "proof kbsl owned for swap"
-                    )
-                    if pk_recovered == xmr_swap.pkbsl:
-                        break
-                    self.log.debug("kbsl recovered pubkey mismatch, retrying.")
-                assert pk_recovered == xmr_swap.pkbsl
+                xmr_swap.kbsl_dleag = ci_to.signRecoverable(
+                    kbsl, "proof kbsl owned for swap"
+                )
+                pk_recovered = ci_to.verifySigAndRecover(
+                    xmr_swap.kbsl_dleag, "proof kbsl owned for swap"
+                )
+                ensure(pk_recovered == xmr_swap.pkbsl, "kbsl recovered pubkey mismatch")
                 msg_buf.kbsl_dleag = xmr_swap.kbsl_dleag
             else:
                 raise ValueError("Unknown curve")
@@ -5586,7 +5555,11 @@ class BasicSwap(BaseApp, BSXNetwork, UIApp):
         block_header = ci.getBlockHeaderFromHeight(tx_height)
         block_time = block_header["time"]
         cc = self.coin_clients[coin_type]
-        if len(cc["watched_outputs"]) == 0 and len(cc["watched_scripts"]) == 0:
+        if (
+            len(cc["watched_outputs"]) == 0
+            and len(cc["watched_transactions"]) == 0
+            and len(cc["watched_scripts"]) == 0
+        ):
             cc["last_height_checked"] = tx_height
             cc["block_check_min_time"] = block_time
             self.setIntKV("block_check_min_time_" + coin_name, block_time, cursor)
@@ -6732,6 +6705,39 @@ class BasicSwap(BaseApp, BSXNetwork, UIApp):
         except Exception:
             return None
 
+    def addWatchedTransaction(
+        self, coin_type, bid_id, txid_hex, tx_type, swap_type=None
+    ):
+        self.log.debug(
+            f"Adding watched transaction {Coins(coin_type).name} bid {self.log.id(bid_id)} tx {self.log.id(txid_hex)} type {tx_type}"
+        )
+
+        watched = self.coin_clients[coin_type]["watched_transactions"]
+
+        for wo in watched:
+            if wo.bid_id == bid_id and wo.txid_hex == txid_hex:
+                self.log.debug("Transaction already being watched.")
+                return
+
+        watched.append(
+            WatchedTransaction(bid_id, coin_type, txid_hex, tx_type, swap_type)
+        )
+
+    def removeWatchedTransaction(self, coin_type, bid_id: bytes, txid_hex: str) -> None:
+        # Remove all for bid if txid is None
+        self.log.debug(
+            f"Removing watched transaction {Coins(coin_type).name} {self.log.id(bid_id)} {self.log.id(txid_hex)}"
+        )
+        watched = self.coin_clients[coin_type]["watched_transactions"]
+        old_len = len(watched)
+        for i in range(old_len - 1, -1, -1):
+            wo = watched[i]
+            if wo.bid_id == bid_id and (txid_hex is None or wo.txid_hex == txid_hex):
+                del watched[i]
+                self.log.debug(
+                    f"Removed watched transaction {Coins(coin_type).name} {self.log.id(bid_id)} {self.log.id(wo.txid_hex)}"
+                )
+
     def addWatchedOutput(
         self, coin_type, bid_id, txid_hex, vout, tx_type, swap_type=None
     ):
@@ -6740,7 +6746,6 @@ class BasicSwap(BaseApp, BSXNetwork, UIApp):
         )
 
         watched = self.coin_clients[coin_type]["watched_outputs"]
-
         for wo in watched:
             if wo.bid_id == bid_id and wo.txid_hex == txid_hex and wo.vout == vout:
                 self.log.debug("Output already being watched.")
@@ -6751,13 +6756,14 @@ class BasicSwap(BaseApp, BSXNetwork, UIApp):
     def removeWatchedOutput(self, coin_type, bid_id: bytes, txid_hex: str) -> None:
         # Remove all for bid if txid is None
         self.log.debug(
-            f"removeWatchedOutput {Coins(coin_type).name} {self.log.id(bid_id)} {self.log.id(txid_hex)}"
+            f"Removing watched output {Coins(coin_type).name} {self.log.id(bid_id)} {self.log.id(txid_hex)}"
         )
-        old_len = len(self.coin_clients[coin_type]["watched_outputs"])
+        watched = self.coin_clients[coin_type]["watched_outputs"]
+        old_len = len(watched)
         for i in range(old_len - 1, -1, -1):
-            wo = self.coin_clients[coin_type]["watched_outputs"][i]
+            wo = watched[i]
             if wo.bid_id == bid_id and (txid_hex is None or wo.txid_hex == txid_hex):
-                del self.coin_clients[coin_type]["watched_outputs"][i]
+                del watched[i]
                 self.log.debug(
                     f"Removed watched output {Coins(coin_type).name} {self.log.id(bid_id)} {self.log.id(wo.txid_hex)}"
                 )
@@ -6770,7 +6776,6 @@ class BasicSwap(BaseApp, BSXNetwork, UIApp):
         )
 
         watched = self.coin_clients[coin_type]["watched_scripts"]
-
         for ws in watched:
             if ws.bid_id == bid_id and ws.tx_type == tx_type and ws.script == script:
                 self.log.debug("Script already being watched.")
@@ -6783,21 +6788,22 @@ class BasicSwap(BaseApp, BSXNetwork, UIApp):
     ) -> None:
         # Remove all for bid if script and type_ind is None
         self.log.debug(
-            "removeWatchedScript {} {}{}".format(
+            "Removing watched script {} {}{}".format(
                 Coins(coin_type).name,
                 {self.log.id(bid_id)},
                 (" type " + str(tx_type)) if tx_type is not None else "",
             )
         )
-        old_len = len(self.coin_clients[coin_type]["watched_scripts"])
+        watched = self.coin_clients[coin_type]["watched_scripts"]
+        old_len = len(watched)
         for i in range(old_len - 1, -1, -1):
-            ws = self.coin_clients[coin_type]["watched_scripts"][i]
+            ws = watched[i]
             if (
                 ws.bid_id == bid_id
                 and (script is None or ws.script == script)
                 and (tx_type is None or ws.tx_type == tx_type)
             ):
-                del self.coin_clients[coin_type]["watched_scripts"][i]
+                del watched[i]
                 self.log.debug(
                     f"Removed watched script {Coins(coin_type).name} {self.log.id(bid_id)}"
                 )
@@ -7175,6 +7181,17 @@ class BasicSwap(BaseApp, BSXNetwork, UIApp):
         finally:
             self.closeDB(cursor)
 
+    def processFoundTransaction(
+        self,
+        watched_txn: WatchedTransaction,
+        block_hash_hex: str,
+        block_height: int,
+        chain_blocks: int,
+    ):
+        self.log.warning(
+            f"Unknown swap_type for found transaction: {self.logIDT(bytes.fromhex(watched_txn.txid_hex))}."
+        )
+
     def processSpentOutput(
         self, coin_type, watched_output, spend_txid_hex, spend_n, spend_txn
     ) -> None:
@@ -7437,6 +7454,13 @@ class BasicSwap(BaseApp, BSXNetwork, UIApp):
                 continue
 
             for tx in block["tx"]:
+                for t in c["watched_transactions"]:
+                    if t.block_hash is not None:
+                        continue
+                    if tx["txid"] == t.txid_hex:
+                        self.processFoundTransaction(
+                            t, block_hash, block["height"], chain_blocks
+                        )
                 for s in c["watched_scripts"]:
                     for i, txo in enumerate(tx["vout"]):
                         if "scriptPubKey" in txo and "hex" in txo["scriptPubKey"]:
@@ -8746,20 +8770,18 @@ class BasicSwap(BaseApp, BSXNetwork, UIApp):
 
             # Extract pubkeys from MSG1F DLEAG
             xmr_swap.pkasl = xmr_swap.kbsl_dleag[0:33]
-            if not ci_from.verifyPubkey(xmr_swap.pkasl):
-                raise ValueError("Invalid coin a pubkey.")
             xmr_swap.pkbsl = xmr_swap.kbsl_dleag[33 : 33 + 32]
-            if not ci_to.verifyPubkey(xmr_swap.pkbsl):
-                raise ValueError("Invalid coin b pubkey.")
         elif ci_to.curve_type() == Curves.secp256k1:
             xmr_swap.pkasl = ci_to.verifySigAndRecover(
                 xmr_swap.kbsl_dleag, "proof kbsl owned for swap"
             )
-            if not ci_from.verifyPubkey(xmr_swap.pkasl):
-                raise ValueError("Invalid coin a pubkey.")
             xmr_swap.pkbsl = xmr_swap.pkasl
         else:
             raise ValueError("Unknown curve")
+        if not ci_from.verifyPubkey(xmr_swap.pkasl):
+            raise ValueError("Invalid coin a pubkey.")
+        if not ci_to.verifyPubkey(xmr_swap.pkbsl):
+            raise ValueError("Invalid coin b pubkey.")
 
         # vkbv and vkbvl are verified in processXmrBidAccept
         xmr_swap.pkbv = ci_to.sumPubkeys(xmr_swap.pkbvl, xmr_swap.pkbvf)
@@ -10827,7 +10849,7 @@ class BasicSwap(BaseApp, BSXNetwork, UIApp):
             >= self.check_expiring_bids_offers_seconds
         ):
             check_records = True
-            self._last_checked_expiring_bids = now
+            self._last_checked_expiring_bids_offers = now
 
         if (
             len(bids_to_expire) == 0

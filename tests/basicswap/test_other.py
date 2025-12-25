@@ -94,6 +94,7 @@ class Test(unittest.TestCase):
         time_val = 48 * 60 * 60
         encoded = ci.getExpectedSequence(TxLockTypes.SEQUENCE_LOCK_TIME, time_val)
         decoded = ci.decodeSequence(encoded)
+        assert encoded == 4194642
         assert decoded >= time_val
         assert decoded <= time_val + 512
 
