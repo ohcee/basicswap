@@ -608,13 +608,6 @@ def runClient(
     except Exception as e:  # noqa: F841
         traceback.print_exc()
 
-    if swap_client.ws_server:
-        try:
-            swap_client.log.info("Stopping websocket server.")
-            swap_client.ws_server.shutdown_gracefully()
-        except Exception as e:  # noqa: F841
-            traceback.print_exc()
-
     swap_client.finalise()
 
     closed_pids = []

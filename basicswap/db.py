@@ -792,8 +792,8 @@ class NetworkPortal(Table):
     created_at = Column("integer")
 
 
-def extract_schema() -> dict:
-    g = globals().copy()
+def extract_schema(input_globals=None) -> dict:
+    g = globals() if input_globals is None else input_globals
     tables = {}
     for name, obj in g.items():
         if not inspect.isclass(obj):
