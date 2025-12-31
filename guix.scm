@@ -90,7 +90,7 @@
 (define python-coincurve-basicswap
   (package
     (name "python-coincurve-basicswap")
-    (version "basicswap_v0.2")
+    (version "basicswap_v0.3")
     (source
      (origin
        (method git-fetch)
@@ -101,7 +101,7 @@
        (file-name
         (git-file-name name version))
        (sha256
-        (base32 "1vm9cvwr0z02zc0mp7l8qj9vhg8kmfrzysiwzg91zkgmccza9ryc"))))
+        (base32 "08bc8175v4d479lgavkcclc0kkh3icxm9i0i26wqd1g3bv0is8cm"))))
     (build-system pyproject-build-system)
     (arguments
      `(#:phases
@@ -135,15 +135,15 @@
 (define-public basicswap
 (package
   (name "basicswap")
-  (version "0.15.1")
+  (version "0.15.2")
   (source (origin
     (method git-fetch)
     (uri (git-reference
       (url "https://github.com/basicswap/basicswap")
-      (commit "0bc9d3a5db40f54d79e2ab18be58b6bbc20740d1")))
+      (commit "2259e964b11925587301070f9fc15e2226b2eb69")))
     (sha256
       (base32
-        "1x6c6hynvbayq4cyv9s6vwgsgdmhm7r1av6iy7pax103lj20habf"))
+        "0d544bj4kvra9y6rpqai1yvnk2igxj4z8s14g5jpksx5z9l0nyy3"))
     (file-name (git-file-name name version))))
   (build-system pyproject-build-system)
 
