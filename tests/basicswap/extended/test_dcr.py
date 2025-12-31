@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # Copyright (c) 2024 tecnovert
-# Copyright (c) 2024 The Basicswap developers
+# Copyright (c) 2024-2025 The Basicswap developers
 # Distributed under the MIT software license, see the accompanying
 # file LICENSE or http://www.opensource.org/licenses/mit-license.php.
 
@@ -689,7 +689,7 @@ def prepareDCDDataDir(datadir, node_id, conf_file, dir_prefix, num_nodes=3):
         "noseeders=1\n",
         "nodnsseed=1\n",
         "nodiscoverip=1\n",
-        "miningaddr=SsYbXyjkKAEXXcGdFgr4u4bo4L8RkCxwQpH\n",
+        "miningaddr=SsppG7KLiH52NC7iJmUVGVq89FLS83E5vho\n",
     ]
 
     for i in range(0, num_nodes):
@@ -725,7 +725,8 @@ class Test(BaseTest):
     dcr_daemons = []
     start_ltc_nodes = False
     start_xmr_nodes = True
-    dcr_mining_addr = "SsYbXyjkKAEXXcGdFgr4u4bo4L8RkCxwQpH"
+    # Addresses differ after 2.1.2, simnet bip44id changed from 1 to 115
+    dcr_mining_addr = "SsppG7KLiH52NC7iJmUVGVq89FLS83E5vho"
     extra_wait_time = 0
     max_fee: int = 10000
 
@@ -739,7 +740,8 @@ class Test(BaseTest):
     def prepareExtraCoins(cls):
         ci0 = cls.swap_clients[0].ci(cls.test_coin)
         if not cls.restore_instance:
-            assert ci0.rpc_wallet("getnewaddress") == cls.dcr_mining_addr
+            dcr_mining_addr = ci0.rpc_wallet("getnewaddress")
+            assert dcr_mining_addr in cls.dcr_mining_addrs
             cls.dcr_ticket_account = ci0.rpc_wallet(
                 "getaccount",
                 [
@@ -776,7 +778,7 @@ class Test(BaseTest):
         num_passed: int = 0
         for i in range(30):
             try:
-                ci0.rpc_wallet("purchaseticket", [cls.dcr_ticket_account, 0.1, 0])
+                ci0.rpc_wallet("purchaseticket", [cls.dcr_ticket_account, 0, 1])
                 num_passed += 1
                 if num_passed >= 5:
                     break
@@ -902,14 +904,14 @@ class Test(BaseTest):
             masterpubkey = loop_ci.rpc_wallet("getmasterpubkey")
             masterpubkey_data = loop_ci.decode_address(masterpubkey)[4:]
 
-            seed_hash = loop_ci.getSeedHash(root_key)
+            seed_hash: bytes = loop_ci.getSeedHash(root_key)
             if i == 0:
                 assert (
                     masterpubkey
-                    == "spubVV1z2AFYjVZvzM45FSaWMPRqyUoUwyW78wfANdjdNG6JGCXrr8AbRvUgYb3Lm1iun9CgHew1KswdePryNLKEnBSQ82AjNpYdQgzXPUme9c6"
+                    == "spubVUjNdu1HtDuQYHjVLTgdK3JKtC7JQoCUkhkoVn3rJt6kYctRksn4vTGsdV3obeZLHaB1YobsLENYKHjtey67LFZJdjJyAvHuRqgFRpaSmfn"
                 )
             if i < 2:
-                assert seed_hash == hash160(masterpubkey_data)
+                assert hash160(masterpubkey_data) == seed_hash
 
     def test_001_segwit(self):
         logging.info("---------- Test {} segwit".format(self.test_coin.name))

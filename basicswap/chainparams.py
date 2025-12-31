@@ -242,7 +242,7 @@ chainparams = {
             "pubkey_address": 0x0E91,
             "script_address": 0x0E6C,
             "key_prefix": 0x2307,
-            "bip44": 1,
+            "bip44": 115,
             "min_amount": 100000,
             "max_amount": 10000000 * COIN,
         },

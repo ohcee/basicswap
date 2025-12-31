@@ -406,7 +406,10 @@ class DCRInterface(Secp256k1Interface):
         # Adjust verificationprogress to consider blocks wallet has synced
         wallet_blocks = self.rpc_wallet("getinfo")["blocks"]
         synced_ind = bci["verificationprogress"]
-        wallet_synced_ind = wallet_blocks / bci["headers"]
+        if bci["headers"] < 1:
+            wallet_synced_ind = 0
+        else:
+            wallet_synced_ind = wallet_blocks / bci["headers"]
         if wallet_synced_ind < synced_ind:
             bci["verificationprogress"] = wallet_synced_ind
 
